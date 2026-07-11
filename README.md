@@ -1,4 +1,6 @@
 # text-analytics-explorer
+## Status
+IN PROGRESS
 ## Background
 Text Analytics is increasingly commoditized. LLMs for all put a world with TA everywhere within reach. While traditionally for customer experience/experience management, TA could be applied to any text at all.
 ## Why
@@ -71,8 +73,6 @@ So that I can be more confident or aggressive when something surfaces.
 As a topic admin,
 I need to be able to undeny accidental denials,
 So that those items are moved back to pending and I can undo mistakes I or other admins made.
-## Status
-IN PROGRESS
 ### Futures
 -insight mining
 -basic aggregation options like an ability to create trends on some sort of date field
