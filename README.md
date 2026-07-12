@@ -1,10 +1,76 @@
 # text-analytics-explorer
+
 ## Status
-IN PROGRESS
+IN PROGRESS — app scaffold, Supabase schema, and mock extraction/mining engine are built and wired end-to-end. Real-LLM extraction is still mocked (see [Extraction seam](#extraction-seam-mock--real)).
+
+## Stack
+
+- **Frontend**: React + TypeScript, built with Vite, styled with Tailwind CSS
+- **Database**: Supabase (Postgres + auto-generated REST API), no auth in v1 (single implicit workspace)
+- **Extraction**: rule-based mock behind a single isolated module — see below
+
+## Getting started
+
+1. Create a free [Supabase](https://supabase.com) project.
+2. In the Supabase SQL editor (or via `supabase db push` with the CLI), run `supabase/migrations/0001_init.sql` against your project. This creates all tables, the two count-increment RPC functions, and permissive RLS policies (open, since v1 has no auth — see the comment at the top of the migration).
+3. Copy `.env.example` to `.env.local` and fill in your project's URL and anon key (Project Settings → API in the Supabase dashboard):
+   ```
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   ```
+4. Install dependencies and run the dev server:
+   ```
+   npm install
+   npm run dev
+   ```
+5. Open the app. With no projects yet, you'll land on the cold-start screen — pick a starter model (seeds a taxonomy + sample documents) or start blank.
+
+Without a configured Supabase project, the app shows a "Connect Supabase" screen instead of crashing.
+
+## Architecture
+
+```
+src/
+  lib/
+    extraction/        # isolated extraction + mining engine (see below) — no Supabase imports
+    api/                # Supabase-backed data access layer (projects, taxonomy, documents, suggestions, mining, sandbox)
+    supabase.ts         # client + isSupabaseConfigured guard
+    database.types.ts   # hand-written Supabase schema types
+    types.ts            # app-facing domain types
+    starterModels.ts    # cold-start taxonomy + sample document fixtures
+  components/           # screens (Upload, Taxonomy, Suggestions, Pending, Denied, Sandbox, Documents, Reports, Settings, Cold-Start)
+  App.tsx               # nav shell, project loading/switching
+supabase/
+  migrations/0001_init.sql
+```
+
+### Extraction seam (mock → real)
+
+Everything upstream imports the extraction API from `src/lib/extraction/index.ts`:
+
+- `extractDocument(input) => ExtractionResult` — classifies one document's text against a project's *existing* topic/theme keyword lists. Same function powers real document uploads and the non-persistent Sandbox preview.
+- `computeSuggestions(input) => ProposedSuggestion[]` — the batch/mining counterpart. Re-runs `extractDocument` across every document, aggregates recurring unmatched terms, orphan clusters, theme occurrence/age, and name-similar pairs into topic/theme creation, promotion, and merge suggestions.
+
+The current implementation (`mockExtractor.ts`, `mining.ts`) is deliberately rule-based: keyword/substring matching, deterministic pseudo-confidence, Jaccard similarity for merges. To swap in a real Claude-backed extractor later, implement the `Extractor` type (see `extraction/types.ts`) in a new file and change one export in `extraction/index.ts` — no UI or API-layer code needs to change.
+
+### Data model
+
+Mirrors `TA spec.md` directly: projects own topics (nested up to 3 levels), themes (flat), and documents; documents accrue `document_topics`/`document_themes` matches; every proposed change (topic/theme creation, promotion, merge) is a row in `suggestions` with a `pending → confirmed | denied` lifecycle and a normalized `signature` used both to avoid duplicate active suggestions and to suppress near-duplicates of a denial for 30 days.
+
+### Known v1 simplifications
+
+- Document detail shows matched topics/themes as a list with quoted excerpts rather than literal inline-highlighted spans in the running text — the mock extractor stores excerpts, not character offsets.
+- Mining is manual ("Run mining now" in Settings) rather than an actual daily scheduled job; wiring a Supabase Edge Function + `pg_cron` for that is a natural next step.
+- A document's identity key (`doc_key`, used for duplicate-blocking/replace) defaults to its file name rather than a separately-reserved system key.
+
 ## Background
+
 Text Analytics is increasingly commoditized. LLMs for all put a world with TA everywhere within reach. While traditionally for customer experience/experience management, TA could be applied to any text at all.
+
 ## Why
+
 Most data - and an increasing proportion of new data and sources - is textual and unstructured. TA exists to give that data structure. Given better structure, an organization can perform analytics and strategic tasks like reviewing the terms and conditions associated with a plane ticket’s purchase and operational tasks like directly reaching out to customers that have been negatively impacted by the fine print in the terms and conditions.
+
 ## What it does (high level)
 -Given text, extract topics and themes
 —Text is bound by a single document. It can range from a few characters (in the case of a tweet) to thousands characters (in the case of a transcribed phone call)

@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Vite
+node_modules/
+dist-ssr/
+*.local
+.env.local
+.env.*.local
+vite.config.ts.timestamp-*
+
