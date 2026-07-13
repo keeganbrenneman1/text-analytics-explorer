@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { ChevronRight, FileText } from "lucide-react";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { Card, ErrorState, LoadingState, SectionHeading } from "./Shared";
@@ -48,7 +49,7 @@ function DocumentDetailView({ documentId, onBack }: { documentId: string; onBack
   useEffect(() => {
     getDocumentDetail(documentId)
       .then(setDoc)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(describeError(err)));
   }, [documentId]);
 
   if (error) return <ErrorState text={error} />;
@@ -138,7 +139,7 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
       filter.kind === "topic"
         ? listDocumentsByTopic(projectId, filter.topicId)
         : listDocuments(projectId, filter.kind === "pending" ? "pending" : filter.state);
-    request.then(setDocs).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+    request.then(setDocs).catch((err) => setError(describeError(err)));
   }, [projectId, filter, refreshKey]);
 
   if (openDocId) return <DocumentDetailView documentId={openDocId} onBack={() => setOpenDocId(null)} />;

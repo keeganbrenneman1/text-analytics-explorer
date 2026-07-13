@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { ChevronRight, Check } from "lucide-react";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { ActionBtn, ErrorState, LoadingState, SectionHeading } from "./Shared";
@@ -139,7 +140,7 @@ export function TaxonomyScreen({
       setTree(built);
       setExpanded((prev) => (prev.length > 0 ? prev : built.map((t) => t.id)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     }
   };
 
@@ -157,7 +158,7 @@ export function TaxonomyScreen({
       setExpanded((e) => [...e, path]);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     }
   };
 
@@ -167,7 +168,7 @@ export function TaxonomyScreen({
       await createTopic(projectId, name.trim(), null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     }
   };
 

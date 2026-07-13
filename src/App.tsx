@@ -8,6 +8,7 @@ import { C, bodyFont, displayFont, monoFont, useFonts } from "./components/theme
 import { LoadingState, ErrorState } from "./components/Shared";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { listProjects } from "./lib/api/projects";
+import { describeError } from "./lib/errorMessage";
 import type { DocFilter, DocumentState, Project } from "./lib/types";
 import { ColdStartScreen } from "./components/ColdStartScreen";
 import { UploadScreen } from "./components/UploadScreen";
@@ -61,7 +62,7 @@ export default function App() {
       setProjects(list);
       setCurrentProjectId((prev) => prev ?? list[0]?.id ?? null);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : String(err));
+      setLoadError(describeError(err));
     }
   };
 
