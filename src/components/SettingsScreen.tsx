@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { Clock } from "lucide-react";
 import { C, bodyFont, displayFont } from "./theme";
 import { SectionHeading } from "./Shared";
@@ -60,7 +61,7 @@ export function SettingsScreen({ project, onChange, onMined }: { project: Projec
       await updateProjectThresholds(project.id, { [key]: value });
       await onChange();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     }
   };
 
@@ -73,7 +74,7 @@ export function SettingsScreen({ project, onChange, onMined }: { project: Projec
       setMinedMessage(created === 0 ? "Mining ran — nothing new crossed the current thresholds." : `Mining ran — ${created} new suggestion${created > 1 ? "s" : ""} added to the review queue.`);
       onMined();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     } finally {
       setMining(false);
     }

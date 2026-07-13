@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { ErrorState, LoadingState, SectionHeading } from "./Shared";
 import { getStateBreakdown } from "../lib/api/documents";
@@ -31,7 +32,7 @@ export function ReportsScreen({
         setTopics(t);
         setBreakdown(b);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(describeError(err)));
   }, [projectId, refreshKey]);
 
   if (error) return <ErrorState text={error} />;

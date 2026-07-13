@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { AlertTriangle, FileText, UploadCloud } from "lucide-react";
 import { C, bodyFont, monoFont } from "./theme";
 import { SectionHeading, LoadingState, ErrorState } from "./Shared";
@@ -31,7 +32,7 @@ export function UploadScreen({ projectId, onUploaded }: { projectId: string; onU
       const list = await listDocuments(projectId, "all");
       setDocs(list);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     }
   }, [projectId]);
 
@@ -53,7 +54,7 @@ export function UploadScreen({ projectId, onUploaded }: { projectId: string; onU
           id: `${file.name}-${Date.now()}`,
           fileName: file.name,
           status: "error",
-          detail: err instanceof Error ? err.message : String(err),
+          detail: describeError(err),
         });
       }
     }

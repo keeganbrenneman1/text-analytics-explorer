@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { Sparkles } from "lucide-react";
 import { C, bodyFont, monoFont, displayFont } from "./theme";
 import { Card, Confidence, SectionHeading, StampBadge } from "./Shared";
@@ -25,7 +26,7 @@ export function SandboxScreen({ projectId, threshold }: { projectId: string; thr
       const r = await analyzeSandboxText(projectId, text);
       setResult(r);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     } finally {
       setLoading(false);
     }

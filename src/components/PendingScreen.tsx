@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { C, bodyFont, monoFont } from "./theme";
 import { ErrorState, LoadingState, SectionHeading } from "./Shared";
 import { listSuggestions } from "../lib/api/suggestions";
@@ -12,7 +13,7 @@ export function PendingScreen({ projectId, refreshKey }: { projectId: string; re
   useEffect(() => {
     listSuggestions(projectId, { status: "pending", sinceDays: 90 })
       .then((list) => setItems(list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err) => setError(describeError(err)));
   }, [projectId, refreshKey]);
 
   if (error) return <ErrorState text={error} />;

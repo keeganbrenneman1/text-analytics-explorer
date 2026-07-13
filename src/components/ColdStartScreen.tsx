@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { Sparkles } from "lucide-react";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { SectionHeading } from "./Shared";
@@ -30,7 +31,7 @@ export function ColdStartScreen({
       const projectId = await createProjectFromStarter(effectiveName, selected === "blank" ? null : selected);
       await onCreated(projectId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     } finally {
       setCreating(false);
     }

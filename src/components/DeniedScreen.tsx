@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { RotateCcw } from "lucide-react";
 import { C, bodyFont, monoFont } from "./theme";
 import { ErrorState, LoadingState, SectionHeading } from "./Shared";
@@ -16,7 +17,7 @@ export function DeniedScreen({ projectId, onChange }: { projectId: string; onCha
       const list = await listSuggestions(projectId, { status: "denied", sinceDays: 30 });
       setItems(list.sort((a, b) => new Date(b.decidedAt ?? b.createdAt).getTime() - new Date(a.decidedAt ?? a.createdAt).getTime()));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     }
   };
 
@@ -32,7 +33,7 @@ export function DeniedScreen({ projectId, onChange }: { projectId: string; onCha
       await load();
       onChange();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     } finally {
       setBusyId(null);
     }

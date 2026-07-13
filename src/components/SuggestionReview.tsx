@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { describeError } from "../lib/errorMessage";
 import { Check, ChevronRight, FileText, Merge, Pencil, X } from "lucide-react";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { ActionBtn, Card, Confidence, EmptyState, ErrorState, LoadingState, SectionHeading, StampBadge } from "./Shared";
@@ -20,7 +21,7 @@ export function SuggestionReview({ projectId, onChange }: { projectId: string; o
       const list = await listSuggestions(projectId, { status: "pending" });
       setSuggestions(list);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     }
   };
 
@@ -49,7 +50,7 @@ export function SuggestionReview({ projectId, onChange }: { projectId: string; o
       await load();
       onChange();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(describeError(err));
     } finally {
       setBusyId(null);
     }
