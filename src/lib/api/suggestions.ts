@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { generateThemeDescription, generateTopicDescription } from "../extraction";
 import type { Database, SuggestionKind, SuggestionStatus } from "../database.types";
 import type {
   MergePayload,
@@ -116,9 +117,11 @@ export async function confirmSuggestion(id: string, decidedBy = "current user"):
       if (parentErr) throw parentErr;
       depth = Math.min(3, parent.depth + 1) as 1 | 2 | 3;
     }
+    const keywords = [payload.name.toLowerCase()];
+    const description = generateTopicDescription({ name: payload.name, keywords, parentName: payload.parentName ?? null });
     const { data: topic, error: topicErr } = await db
       .from("topics")
-      .insert({ project_id: row.project_id, parent_id: payload.parentTopicId, name: payload.name, depth, keywords: [payload.name.toLowerCase()] })
+      .insert({ project_id: row.project_id, parent_id: payload.parentTopicId, name: payload.name, depth, keywords, description })
       .select("*")
       .single();
     if (topicErr) throw topicErr;
@@ -128,9 +131,11 @@ export async function confirmSuggestion(id: string, decidedBy = "current user"):
     if (countErr) throw countErr;
   } else if (row.kind === "theme_creation") {
     const payload = row.payload as unknown as ThemeCreationPayload;
+    const keywords = [payload.name.toLowerCase()];
+    const description = generateThemeDescription({ name: payload.name, keywords });
     const { data: theme, error: themeErr } = await db
       .from("themes")
-      .insert({ project_id: row.project_id, name: payload.name, keywords: [payload.name.toLowerCase()] })
+      .insert({ project_id: row.project_id, name: payload.name, keywords, description })
       .select("*")
       .single();
     if (themeErr) throw themeErr;
@@ -140,9 +145,11 @@ export async function confirmSuggestion(id: string, decidedBy = "current user"):
     if (countErr) throw countErr;
   } else if (row.kind === "promotion") {
     const payload = row.payload as unknown as PromotionPayload;
+    const keywords = [payload.themeName.toLowerCase()];
+    const description = generateTopicDescription({ name: payload.proposedTopicName, keywords, parentName: null });
     const { data: topic, error: topicErr } = await db
       .from("topics")
-      .insert({ project_id: row.project_id, parent_id: null, name: payload.proposedTopicName, depth: 1, keywords: [payload.themeName.toLowerCase()] })
+      .insert({ project_id: row.project_id, parent_id: null, name: payload.proposedTopicName, depth: 1, keywords, description })
       .select("*")
       .single();
     if (topicErr) throw topicErr;

@@ -24,6 +24,7 @@ function mapSummary(row: DocumentRow, pendingCount: number, topicCount: number):
     docKey: row.doc_key,
     name: row.name,
     state: row.state,
+    attributes: row.attributes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     pendingCount,
@@ -121,6 +122,33 @@ export async function listDocumentsByTopic(projectId: string, topicId: string): 
   return summarizeDocuments(projectId, rows ?? []);
 }
 
+/** Documents tagged with a specific theme. */
+export async function listDocumentsByTheme(projectId: string, themeId: string): Promise<DocumentSummary[]> {
+  const db = client();
+  const { data: links, error: linkErr } = await db.from("document_themes").select("document_id").eq("theme_id", themeId);
+  if (linkErr) throw linkErr;
+  const ids = (links ?? []).map((l) => l.document_id);
+  if (ids.length === 0) return [];
+
+  const { data: rows, error } = await db.from("documents").select("*").eq("project_id", projectId).in("id", ids).order("created_at", { ascending: false });
+  if (error) throw error;
+  return summarizeDocuments(projectId, rows ?? []);
+}
+
+/** Documents whose `attributes[key]` equals `value` — powers the Upload screen's
+ * source clickthrough and Reports' attribute filter. */
+export async function listDocumentsByAttribute(projectId: string, key: string, value: string | number): Promise<DocumentSummary[]> {
+  const db = client();
+  const { data: rows, error } = await db
+    .from("documents")
+    .select("*")
+    .eq("project_id", projectId)
+    .contains("attributes", { [key]: value })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return summarizeDocuments(projectId, rows ?? []);
+}
+
 export async function getDocumentDetail(documentId: string): Promise<DocumentDetail> {
   const { data: row, error } = await client().from("documents").select("*").eq("id", documentId).single();
   if (error) throw error;
@@ -136,17 +164,19 @@ export async function getDocumentDetail(documentId: string): Promise<DocumentDet
   const [{ data: topicNameRows, error: tnErr }, { data: themeNameRows, error: thnErr }] = await Promise.all([
     client()
       .from("topics")
-      .select("id, name")
+      .select("id, name, description")
       .in("id", (topicMatches ?? []).map((m) => m.topic_id)),
     client()
       .from("themes")
-      .select("id, name")
+      .select("id, name, description")
       .in("id", (themeMatches ?? []).map((m) => m.theme_id)),
   ]);
   if (tnErr) throw tnErr;
   if (thnErr) throw thnErr;
   const topicNames = new Map((topicNameRows ?? []).map((t) => [t.id, t.name]));
   const themeNames = new Map((themeNameRows ?? []).map((t) => [t.id, t.name]));
+  const topicDescriptions = new Map((topicNameRows ?? []).map((t) => [t.id, t.description]));
+  const themeDescriptions = new Map((themeNameRows ?? []).map((t) => [t.id, t.description]));
 
   const { data: pendingSuggestions, error: sErr } = await client()
     .from("suggestions")
@@ -178,6 +208,7 @@ export async function getDocumentDetail(documentId: string): Promise<DocumentDet
       kind: "topic",
       id: m.topic_id,
       label: topicNames.get(m.topic_id) ?? "Unknown topic",
+      description: topicDescriptions.get(m.topic_id) ?? null,
       excerpt: m.excerpt ?? "",
       confidence: Number(m.confidence),
       orphan: m.orphan,
@@ -187,6 +218,7 @@ export async function getDocumentDetail(documentId: string): Promise<DocumentDet
       kind: "theme",
       id: m.theme_id,
       label: themeNames.get(m.theme_id) ?? "Unknown theme",
+      description: themeDescriptions.get(m.theme_id) ?? null,
       excerpt: m.excerpt ?? "",
       confidence: Number(m.confidence),
       orphan: false,
@@ -279,6 +311,7 @@ export async function uploadDocument(
   name: string,
   content: string,
   docKey: string = name,
+  attributes: Record<string, string | number> = {},
 ): Promise<UploadResult> {
   const db = client();
   const contentHash = await sha256(content);
@@ -305,7 +338,7 @@ export async function uploadDocument(
     await clearPriorMatches(existing.id);
     const { error: updateErr } = await db
       .from("documents")
-      .update({ content, content_hash: contentHash, state: result.state })
+      .update({ content, content_hash: contentHash, state: result.state, attributes })
       .eq("id", existing.id);
     if (updateErr) throw updateErr;
     await applyExtractionResult(projectId, existing.id, result);
@@ -314,7 +347,7 @@ export async function uploadDocument(
 
   const { data: inserted, error: insertErr } = await db
     .from("documents")
-    .insert({ project_id: projectId, doc_key: docKey, name, content, content_hash: contentHash, state: result.state })
+    .insert({ project_id: projectId, doc_key: docKey, name, content, content_hash: contentHash, state: result.state, attributes })
     .select("*")
     .single();
   if (insertErr) throw insertErr;

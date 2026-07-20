@@ -10,6 +10,7 @@ export { extractDocument } from "./mockExtractor";
 export { computeSuggestions } from "./mining";
 export { DETECTION_PARAMS, MERGE_PARAMS, PROMOTION_PARAMS } from "./thresholds";
 export { hashConfidence, jaccardSimilarity, titleCase } from "./tokenize";
+export { generateTopicDescription, generateThemeDescription } from "./description";
 
 export type {
   DocumentState,
@@ -25,3 +26,4 @@ export type {
 } from "./types";
 
 export type { MiningDocument, MiningInput, MiningOutput, MiningProject, ProposedSuggestion, SuggestionKind } from "./mining";
+export type { DescribableTheme, DescribableTopic } from "./description";

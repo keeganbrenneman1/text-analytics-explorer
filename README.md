@@ -12,7 +12,7 @@ IN PROGRESS — app scaffold, Supabase schema, and mock extraction/mining engine
 ## Getting started
 
 1. Create a free [Supabase](https://supabase.com) project.
-2. In the Supabase SQL editor (or via `supabase db push` with the CLI), run `supabase/migrations/0001_init.sql` against your project. This creates all tables, the two count-increment RPC functions, and permissive RLS policies (open, since v1 has no auth — see the comment at the top of the migration).
+2. In the Supabase SQL editor (or via `supabase db push` with the CLI), run the migrations in `supabase/migrations/` **in order** against your project: `0001_init.sql` first (all core tables, the two count-increment RPC functions, permissive RLS policies), then `0002_descriptions_and_attributes.sql` (topic/theme descriptions, the structured-attribute registry). If you already have a live project from before `0002` existed, you must run it against that same project before deploying newer code — the app will error on missing columns/tables otherwise.
 3. Copy `.env.example` to `.env.local` and fill in your project's URL and anon key (Project Settings → API in the Supabase dashboard):
    ```
    VITE_SUPABASE_URL=https://your-project.supabase.co
@@ -33,7 +33,7 @@ Without a configured Supabase project, the app shows a "Connect Supabase" screen
 src/
   lib/
     extraction/        # isolated extraction + mining engine (see below) — no Supabase imports
-    api/                # Supabase-backed data access layer (projects, taxonomy, documents, suggestions, mining, sandbox)
+    api/                # Supabase-backed data access layer (projects, taxonomy, documents, suggestions, mining, sandbox, attributes, reports)
     supabase.ts         # client + isSupabaseConfigured guard
     database.types.ts   # hand-written Supabase schema types
     types.ts            # app-facing domain types
@@ -42,6 +42,7 @@ src/
   App.tsx               # nav shell, project loading/switching
 supabase/
   migrations/0001_init.sql
+  migrations/0002_descriptions_and_attributes.sql
 ```
 
 ### Extraction seam (mock → real)
@@ -56,6 +57,8 @@ The current implementation (`mockExtractor.ts`, `mining.ts`) is deliberately rul
 ### Data model
 
 Mirrors `TA spec.md` directly: projects own topics (nested up to 3 levels), themes (flat), and documents; documents accrue `document_topics`/`document_themes` matches; every proposed change (topic/theme creation, promotion, merge) is a row in `suggestions` with a `pending → confirmed | denied` lifecycle and a normalized `signature` used both to avoid duplicate active suggestions and to suppress near-duplicates of a denial for 30 days.
+
+Topics and themes carry a `description` (templated by the same mock-now/real-later seam as extraction — `src/lib/extraction/description.ts` — auto-generated on creation, or backfilled on demand from the Taxonomy screen). Projects also have a `project_attributes` registry (currently seeded with a single "Source" field) plus a `documents.attributes` JSONB column, so Upload/Documents/Reports can all filter and aggregate on structured metadata generically rather than each hardcoding a field name. Reports additionally computes topic co-occurrence (which topic pairs get tagged on the same document) client-side from the existing single taxonomy. Each project still has exactly one taxonomy — supporting multiple parallel taxonomies per project was considered and deliberately deferred as a much larger schema/architecture change with no concrete need yet.
 
 ### Known v1 simplifications
 

@@ -1,6 +1,6 @@
-import type { DocumentState, SuggestionKind, SuggestionStatus, ThresholdLevel } from "./database.types";
+import type { AttributeType, DocumentState, SuggestionKind, SuggestionStatus, ThresholdLevel } from "./database.types";
 
-export type { DocumentState, SuggestionKind, SuggestionStatus, ThresholdLevel };
+export type { AttributeType, DocumentState, SuggestionKind, SuggestionStatus, ThresholdLevel };
 
 export interface Project {
   id: string;
@@ -18,6 +18,7 @@ export interface Topic {
   name: string;
   depth: 1 | 2 | 3;
   keywords: string[];
+  description: string | null;
   docCount: number;
   createdAt: string;
 }
@@ -31,8 +32,21 @@ export interface Theme {
   projectId: string;
   name: string;
   keywords: string[];
+  description: string | null;
   docCount: number;
   firstSeenAt: string;
+  createdAt: string;
+}
+
+export type AttributeValue = string | number;
+
+export interface ProjectAttribute {
+  id: string;
+  projectId: string;
+  key: string;
+  label: string;
+  type: AttributeType;
+  options: string[];
   createdAt: string;
 }
 
@@ -42,6 +56,7 @@ export interface DocumentSummary {
   docKey: string;
   name: string;
   state: DocumentState;
+  attributes: Record<string, AttributeValue>;
   createdAt: string;
   updatedAt: string;
   pendingCount: number;
@@ -52,6 +67,7 @@ export interface DocumentSegmentMatch {
   kind: "topic" | "theme";
   id: string;
   label: string;
+  description: string | null;
   excerpt: string;
   confidence: number;
   orphan: boolean;
@@ -122,24 +138,36 @@ export interface Suggestion<P = SuggestionPayload> {
 export interface StarterTopicSeed {
   name: string;
   keywords: string[];
+  description: string;
   children?: StarterTopicSeed[];
 }
 
 export interface StarterThemeSeed {
   name: string;
   keywords: string[];
+  description: string;
+}
+
+export interface StarterAttributeSeed {
+  key: string;
+  label: string;
+  type: AttributeType;
+  options?: string[];
 }
 
 export interface StarterDocumentSeed {
   docKey: string;
   name: string;
   content: string;
+  attributes?: Record<string, AttributeValue>;
 }
 
 export type DocFilter =
   | { kind: "state"; state: "all" | DocumentState }
   | { kind: "pending" }
-  | { kind: "topic"; topicId: string; topicName: string };
+  | { kind: "topic"; topicId: string; topicName: string }
+  | { kind: "theme"; themeId: string; themeName: string }
+  | { kind: "attribute"; key: string; label: string; value: AttributeValue };
 
 export interface StarterModel {
   key: string;
@@ -147,5 +175,6 @@ export interface StarterModel {
   description: string;
   topics: StarterTopicSeed[];
   themes: StarterThemeSeed[];
+  attributes: StarterAttributeSeed[];
   documents: StarterDocumentSeed[];
 }
