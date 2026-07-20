@@ -7,6 +7,7 @@ export type DocumentState = "tagged" | "orphaned" | "untagged";
 export type SuggestionKind = "topic_creation" | "theme_creation" | "promotion" | "merge";
 export type SuggestionStatus = "pending" | "confirmed" | "denied";
 export type Polarity = "positive" | "negative" | "neutral";
+export type AttributeType = "text" | "number" | "date" | "select";
 
 export interface Database {
   public: {
@@ -39,6 +40,7 @@ export interface Database {
           name: string;
           depth: 1 | 2 | 3;
           keywords: string[];
+          description: string | null;
           doc_count: number;
           created_at: string;
         };
@@ -49,6 +51,7 @@ export interface Database {
           name: string;
           depth: 1 | 2 | 3;
           keywords?: string[];
+          description?: string | null;
           doc_count?: number;
           created_at?: string;
         };
@@ -62,6 +65,7 @@ export interface Database {
           name: string;
           keywords: string[];
           polarity: Polarity | null;
+          description: string | null;
           doc_count: number;
           first_seen_at: string;
           created_at: string;
@@ -72,6 +76,7 @@ export interface Database {
           name: string;
           keywords?: string[];
           polarity?: Polarity | null;
+          description?: string | null;
           doc_count?: number;
           first_seen_at?: string;
           created_at?: string;
@@ -88,6 +93,7 @@ export interface Database {
           content: string;
           content_hash: string;
           state: DocumentState;
+          attributes: Record<string, string | number>;
           created_at: string;
           updated_at: string;
         };
@@ -99,10 +105,33 @@ export interface Database {
           content: string;
           content_hash: string;
           state: DocumentState;
+          attributes?: Record<string, string | number>;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["documents"]["Insert"]>;
+        Relationships: [];
+      };
+      project_attributes: {
+        Row: {
+          id: string;
+          project_id: string;
+          key: string;
+          label: string;
+          type: AttributeType;
+          options: string[];
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          key: string;
+          label: string;
+          type?: AttributeType;
+          options?: string[];
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["project_attributes"]["Insert"]>;
         Relationships: [];
       };
       document_topics: {

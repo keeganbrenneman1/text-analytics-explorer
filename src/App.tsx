@@ -9,7 +9,7 @@ import { LoadingState, ErrorState } from "./components/Shared";
 import { isSupabaseConfigured } from "./lib/supabase";
 import { listProjects } from "./lib/api/projects";
 import { describeError } from "./lib/errorMessage";
-import type { DocFilter, DocumentState, Project } from "./lib/types";
+import type { DocFilter, Project } from "./lib/types";
 import { ColdStartScreen } from "./components/ColdStartScreen";
 import { UploadScreen } from "./components/UploadScreen";
 import { TaxonomyScreen } from "./components/TaxonomyScreen";
@@ -18,7 +18,7 @@ import { PendingScreen } from "./components/PendingScreen";
 import { DeniedScreen } from "./components/DeniedScreen";
 import { SandboxScreen } from "./components/SandboxScreen";
 import { DocumentsScreen } from "./components/DocumentsScreen";
-import { ReportsScreen } from "./components/ReportsScreen";
+import { ReportsScreen, type ReportsDrillTarget } from "./components/ReportsScreen";
 import { SettingsScreen } from "./components/SettingsScreen";
 
 function ConnectSupabaseNotice() {
@@ -41,6 +41,21 @@ function ConnectSupabaseNotice() {
 
 type Section = "upload" | "textAnalytics" | "documents" | "reports" | "settings";
 type TaTab = "taxonomy" | "suggestions" | "pending" | "denied" | "sandbox";
+
+function docFilterKey(filter: DocFilter): string {
+  switch (filter.kind) {
+    case "topic":
+      return `topic:${filter.topicId}`;
+    case "theme":
+      return `theme:${filter.themeId}`;
+    case "attribute":
+      return `attribute:${filter.key}:${filter.value}`;
+    case "pending":
+      return "pending";
+    case "state":
+      return `state:${filter.state}`;
+  }
+}
 
 export default function App() {
   useFonts();
@@ -119,8 +134,10 @@ export default function App() {
     setSection("documents");
   };
 
-  const goToDocuments = (target: { topicId: string; topicName: string } | { state: "all" | DocumentState }) => {
+  const goToDocuments = (target: ReportsDrillTarget) => {
     if ("topicId" in target) setDocFilter({ kind: "topic", topicId: target.topicId, topicName: target.topicName });
+    else if ("themeId" in target) setDocFilter({ kind: "theme", themeId: target.themeId, themeName: target.themeName });
+    else if ("attributeKey" in target) setDocFilter({ kind: "attribute", key: target.attributeKey, label: target.attributeLabel, value: target.attributeValue });
     else setDocFilter({ kind: "state", state: target.state });
     setSection("documents");
   };
@@ -136,7 +153,16 @@ export default function App() {
   };
 
   const topScreens: Record<Section, ReactNode> = {
-    upload: <UploadScreen projectId={currentProject.id} onUploaded={bumpRefresh} />,
+    upload: (
+      <UploadScreen
+        projectId={currentProject.id}
+        onUploaded={bumpRefresh}
+        onFilterDocuments={(filter) => {
+          setDocFilter(filter);
+          setSection("documents");
+        }}
+      />
+    ),
     textAnalytics: (
       <div>
         <div className="flex gap-1 mb-8 flex-wrap">
@@ -162,7 +188,7 @@ export default function App() {
     ),
     documents: (
       <DocumentsScreen
-        key={docFilter.kind === "topic" ? docFilter.topicId : docFilter.kind === "pending" ? "pending" : docFilter.state}
+        key={docFilterKey(docFilter)}
         projectId={currentProject.id}
         initialFilter={docFilter}
         refreshKey={refreshKey}

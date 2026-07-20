@@ -3,8 +3,10 @@ import { describeError } from "../lib/errorMessage";
 import { ChevronRight, FileText } from "lucide-react";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { Card, ErrorState, LoadingState, SectionHeading } from "./Shared";
-import { getDocumentDetail, listDocuments, listDocumentsByTopic } from "../lib/api/documents";
-import type { DocFilter, DocumentDetail as DocumentDetailType, DocumentSummary } from "../lib/types";
+import { getDocumentDetail, listDocuments, listDocumentsByAttribute, listDocumentsByTheme, listDocumentsByTopic } from "../lib/api/documents";
+import { listTopics, listThemes } from "../lib/api/taxonomy";
+import { listProjectAttributes, summarizeAttributeValues } from "../lib/api/attributes";
+import type { DocFilter, DocumentDetail as DocumentDetailType, DocumentSummary, ProjectAttribute, Theme, Topic } from "../lib/types";
 
 const STATE_STYLE: Record<DocumentSummary["state"], { color: string; label: string }> = {
   tagged: { color: C.verdigris, label: "Tagged" },
@@ -35,9 +37,12 @@ function MatchPill({ match }: { match: DocumentDetailType["matches"][number] }) 
           </span>
         )}
       </div>
-      {match.excerpt && (
-        <p style={{ ...bodyFont, fontSize: 12.5, color: C.mutedDark, fontStyle: "italic" }}>"{match.excerpt}"</p>
+      {match.description && (
+        <p style={{ ...bodyFont, fontSize: 12, color: C.mutedDark }} className="mb-1">
+          {match.description}
+        </p>
       )}
+      {match.excerpt && <p style={{ ...bodyFont, fontSize: 12.5, color: C.mutedDark, fontStyle: "italic" }}>"{match.excerpt}"</p>}
     </div>
   );
 }
@@ -58,6 +63,7 @@ function DocumentDetailView({ documentId, onBack }: { documentId: string; onBack
   const stateStyle = STATE_STYLE[doc.state];
   const topicMatches = doc.matches.filter((m) => m.kind === "topic");
   const themeMatches = doc.matches.filter((m) => m.kind === "theme");
+  const attributeEntries = Object.entries(doc.attributes);
 
   return (
     <div>
@@ -78,6 +84,11 @@ function DocumentDetailView({ documentId, onBack }: { documentId: string; onBack
             {doc.pendingCount} pending suggestion{doc.pendingCount > 1 ? "s" : ""} from this document
           </span>
         )}
+        {attributeEntries.map(([key, value]) => (
+          <span key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-xs" style={{ ...monoFont, color: C.muted, border: `1px solid ${C.panelBorder}` }}>
+            {key}: {value}
+          </span>
+        ))}
       </div>
 
       <Card>
@@ -116,11 +127,18 @@ function DocumentDetailView({ documentId, onBack }: { documentId: string; onBack
   );
 }
 
+function flattenTopics(topics: Topic[]): Topic[] {
+  return [...topics].sort((a, b) => (a.depth !== b.depth ? a.depth - b.depth : a.name.localeCompare(b.name)));
+}
+
 export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { projectId: string; initialFilter: DocFilter; refreshKey: number }) {
   const [filter, setFilter] = useState<DocFilter>(initialFilter);
   const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [attributes, setAttributes] = useState<ProjectAttribute[]>([]);
 
   const quickFilters: { key: DocFilter; label: string }[] = [
     { key: { kind: "state", state: "all" }, label: "All" },
@@ -130,30 +148,39 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
     { key: { kind: "pending" }, label: "Has pending" },
   ];
 
-  const isSameFilter = (a: DocFilter, b: DocFilter) =>
-    a.kind === "pending" && b.kind === "pending" ? true : a.kind === "state" && b.kind === "state" ? a.state === b.state : false;
+  const isSameFilter = (a: DocFilter, b: DocFilter) => a.kind === "pending" && b.kind === "pending" ? true : a.kind === "state" && b.kind === "state" ? a.state === b.state : false;
+
+  useEffect(() => {
+    Promise.all([listTopics(projectId), listThemes(projectId), listProjectAttributes(projectId)])
+      .then(([t, th, attrs]) => {
+        setTopics(t);
+        setThemes(th);
+        setAttributes(attrs);
+      })
+      .catch((err) => setError(describeError(err)));
+  }, [projectId, refreshKey]);
 
   useEffect(() => {
     setDocs(null);
-    const request =
-      filter.kind === "topic"
-        ? listDocumentsByTopic(projectId, filter.topicId)
-        : listDocuments(projectId, filter.kind === "pending" ? "pending" : filter.state);
+    let request: Promise<DocumentSummary[]>;
+    if (filter.kind === "topic") request = listDocumentsByTopic(projectId, filter.topicId);
+    else if (filter.kind === "theme") request = listDocumentsByTheme(projectId, filter.themeId);
+    else if (filter.kind === "attribute") request = listDocumentsByAttribute(projectId, filter.key, filter.value);
+    else request = listDocuments(projectId, filter.kind === "pending" ? "pending" : filter.state);
     request.then(setDocs).catch((err) => setError(describeError(err)));
   }, [projectId, filter, refreshKey]);
 
   if (openDocId) return <DocumentDetailView documentId={openDocId} onBack={() => setOpenDocId(null)} />;
   if (error) return <ErrorState text={error} />;
 
+  const filterLabel =
+    filter.kind === "topic" ? `Topic: ${filter.topicName}` : filter.kind === "theme" ? `Theme: ${filter.themeName}` : filter.kind === "attribute" ? `${filter.label}: ${filter.value}` : null;
+
   return (
     <div>
-      <SectionHeading
-        eyebrow="All Documents"
-        title={filter.kind === "topic" ? `Documents — ${filter.topicName}` : "Documents"}
-        meta={docs ? `${docs.length} shown` : undefined}
-      />
+      <SectionHeading eyebrow="All Documents" title={filterLabel ? `Documents — ${filterLabel}` : "Documents"} meta={docs ? `${docs.length} shown` : undefined} />
 
-      <div className="flex gap-2 mb-6 flex-wrap items-center">
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
         {quickFilters.map((f) => (
           <button
             key={f.label}
@@ -169,11 +196,58 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
             {f.label}
           </button>
         ))}
-        {filter.kind === "topic" && (
+        {filterLabel && (
           <span className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}>
-            Topic: {filter.topicName}
+            {filterLabel}
           </span>
         )}
+      </div>
+
+      <div className="flex gap-3 mb-6 flex-wrap items-center">
+        <p style={{ ...monoFont, fontSize: 10.5, color: C.mutedDark, letterSpacing: "0.06em" }} className="uppercase">
+          Drill into a specific match:
+        </p>
+        <select
+          value={filter.kind === "topic" ? filter.topicId : ""}
+          onChange={(e) => {
+            const topic = topics.find((t) => t.id === e.target.value);
+            if (topic) setFilter({ kind: "topic", topicId: topic.id, topicName: topic.name });
+          }}
+          className="px-2 py-1.5 rounded-sm text-xs"
+          style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}
+        >
+          <option value="">Topic…</option>
+          {flattenTopics(topics).map((t) => (
+            <option key={t.id} value={t.id}>
+              {"—".repeat(t.depth - 1)} {t.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filter.kind === "theme" ? filter.themeId : ""}
+          onChange={(e) => {
+            const theme = themes.find((t) => t.id === e.target.value);
+            if (theme) setFilter({ kind: "theme", themeId: theme.id, themeName: theme.name });
+          }}
+          className="px-2 py-1.5 rounded-sm text-xs"
+          style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}
+        >
+          <option value="">Theme…</option>
+          {themes.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        {attributes.map((attr) => (
+          <AttributeFilterSelect
+            key={attr.id}
+            projectId={projectId}
+            attribute={attr}
+            active={filter.kind === "attribute" && filter.key === attr.key ? filter.value : ""}
+            onSelect={(value) => setFilter({ kind: "attribute", key: attr.key, label: attr.label, value })}
+          />
+        ))}
       </div>
 
       {docs === null ? (
@@ -212,5 +286,41 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
         </div>
       )}
     </div>
+  );
+}
+
+function AttributeFilterSelect({
+  projectId,
+  attribute,
+  active,
+  onSelect,
+}: {
+  projectId: string;
+  attribute: ProjectAttribute;
+  active: string | number;
+  onSelect: (value: string) => void;
+}) {
+  const [options, setOptions] = useState<string[]>(attribute.options);
+
+  useEffect(() => {
+    if (attribute.options.length > 0) return;
+    summarizeAttributeValues(projectId, attribute.key).then((rows) => setOptions(rows.map((r) => String(r.value))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, attribute.key]);
+
+  return (
+    <select
+      value={active}
+      onChange={(e) => onSelect(e.target.value)}
+      className="px-2 py-1.5 rounded-sm text-xs"
+      style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}
+    >
+      <option value="">{attribute.label}…</option>
+      {options.map((opt) => (
+        <option key={opt} value={opt}>
+          {opt}
+        </option>
+      ))}
+    </select>
   );
 }

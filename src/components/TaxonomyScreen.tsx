@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { describeError } from "../lib/errorMessage";
-import { ChevronRight, Check } from "lucide-react";
+import { ChevronRight, Check, Sparkles } from "lucide-react";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { ActionBtn, ErrorState, LoadingState, SectionHeading } from "./Shared";
-import { buildTopicTree, createTopic, listTopics } from "../lib/api/taxonomy";
-import type { TopicNode } from "../lib/types";
+import { backfillDescriptions, buildTopicTree, createTopic, listThemes, listTopics } from "../lib/api/taxonomy";
+import type { Theme, TopicNode } from "../lib/types";
 
 const MAX_TOPIC_DEPTH = 3;
 
@@ -44,7 +44,7 @@ function TaxonomyNodeRow({
         className="w-full flex items-center justify-between pr-5 py-2.5 text-left"
         style={{ paddingLeft: indent, background: depth === 1 ? C.panel : "#181E27", borderBottom: `1px solid ${C.panelBorder}` }}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {canExpand && node.children.length > 0 && (
             <ChevronRight
               size={depth === 1 ? 14 : 12}
@@ -53,14 +53,21 @@ function TaxonomyNodeRow({
                 e.stopPropagation();
                 toggle(path);
               }}
-              style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}
+              style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s", flexShrink: 0 }}
             />
           )}
-          <span style={{ ...(depth === 1 ? displayFont : bodyFont), fontWeight: depth === 1 ? 600 : 400, fontSize: depth === 1 ? 15.5 : 13.5, color: C.paper }}>
-            {node.name}
-          </span>
+          <div className="min-w-0">
+            <span style={{ ...(depth === 1 ? displayFont : bodyFont), fontWeight: depth === 1 ? 600 : 400, fontSize: depth === 1 ? 15.5 : 13.5, color: C.paper }}>
+              {node.name}
+            </span>
+            {node.description && (
+              <p style={{ ...bodyFont, fontSize: 11.5, color: C.mutedDark }} className="truncate">
+                {node.description}
+              </p>
+            )}
+          </div>
         </div>
-        <span style={{ ...monoFont, fontSize: 11, color: C.mutedDark }}>
+        <span style={{ ...monoFont, fontSize: 11, color: C.mutedDark, flexShrink: 0, marginLeft: 12 }}>
           {depth === 1 ? `${node.children.length} topics` : `${node.docCount} docs`}
         </span>
       </button>
@@ -118,6 +125,22 @@ function TaxonomyNodeRow({
   );
 }
 
+function ThemeRow({ theme, isLast }: { theme: Theme; isLast: boolean }) {
+  return (
+    <div className="px-5 py-2.5 flex items-center justify-between" style={{ borderBottom: isLast ? "none" : `1px solid ${C.panelBorder}` }}>
+      <div className="min-w-0">
+        <span style={{ ...bodyFont, fontWeight: 600, fontSize: 13.5, color: C.paper }}>{theme.name}</span>
+        {theme.description && (
+          <p style={{ ...bodyFont, fontSize: 11.5, color: C.mutedDark }} className="truncate">
+            {theme.description}
+          </p>
+        )}
+      </div>
+      <span style={{ ...monoFont, fontSize: 11, color: C.mutedDark, flexShrink: 0, marginLeft: 12 }}>{theme.docCount} docs</span>
+    </div>
+  );
+}
+
 export function TaxonomyScreen({
   projectId,
   refreshKey,
@@ -128,16 +151,20 @@ export function TaxonomyScreen({
   onDrillToDocuments: (topicId: string, topicName: string) => void;
 }) {
   const [tree, setTree] = useState<TopicNode[] | null>(null);
+  const [themes, setThemes] = useState<Theme[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string[]>([]);
   const [adding, setAdding] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
 
   const load = async () => {
     try {
-      const topics = await listTopics(projectId);
+      const [topics, themeList] = await Promise.all([listTopics(projectId), listThemes(projectId)]);
       const built = buildTopicTree(topics);
       setTree(built);
+      setThemes(themeList);
       setExpanded((prev) => (prev.length > 0 ? prev : built.map((t) => t.id)));
     } catch (err) {
       setError(describeError(err));
@@ -172,12 +199,40 @@ export function TaxonomyScreen({
     }
   };
 
+  const runBackfill = async () => {
+    setBackfilling(true);
+    setBackfillMessage(null);
+    try {
+      const { updated } = await backfillDescriptions(projectId);
+      setBackfillMessage(updated === 0 ? "Every topic and theme already has a description." : `Generated ${updated} missing description${updated > 1 ? "s" : ""}.`);
+      await load();
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
   if (error) return <ErrorState text={error} />;
-  if (tree === null) return <LoadingState />;
+  if (tree === null || themes === null) return <LoadingState />;
 
   return (
     <div>
       <SectionHeading eyebrow="Manual Ontology" title="Taxonomy" meta={`Click a topic to see its documents · up to ${MAX_TOPIC_DEPTH} levels deep`} />
+
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={() => void runBackfill()}
+          disabled={backfilling}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium disabled:opacity-60"
+          style={{ ...bodyFont, color: C.paper, border: `1px solid ${C.panelBorder}` }}
+        >
+          <Sparkles size={12} /> {backfilling ? "Generating…" : "Generate missing descriptions"}
+        </button>
+        {backfillMessage && (
+          <span style={{ ...bodyFont, fontSize: 12, color: C.muted }}>{backfillMessage}</span>
+        )}
+      </div>
 
       <div className="rounded-md overflow-hidden mb-4" style={{ border: `1px solid ${C.panelBorder}` }}>
         {tree.length === 0 && (
@@ -204,7 +259,7 @@ export function TaxonomyScreen({
       </div>
 
       {adding === "__root__" ? (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-10">
           <input
             autoFocus
             value={draft}
@@ -225,9 +280,24 @@ export function TaxonomyScreen({
           />
         </div>
       ) : (
-        <button onClick={() => setAdding("__root__")} style={{ ...monoFont, fontSize: 11, color: C.mutedDark, letterSpacing: "0.05em" }} className="uppercase">
+        <button onClick={() => setAdding("__root__")} style={{ ...monoFont, fontSize: 11, color: C.mutedDark, letterSpacing: "0.05em" }} className="uppercase mb-10 block">
           + Add top-level topic
         </button>
+      )}
+
+      <p style={{ ...monoFont, color: C.amber, fontSize: 11, letterSpacing: "0.14em" }} className="uppercase mb-3">
+        Themes
+      </p>
+      {themes.length === 0 ? (
+        <p style={{ ...bodyFont, color: C.muted, fontSize: 13 }}>
+          No themes yet — themes surface on their own as mining spots recurring patterns in your documents.
+        </p>
+      ) : (
+        <div className="rounded-md overflow-hidden" style={{ border: `1px solid ${C.panelBorder}` }}>
+          {themes.map((theme, i) => (
+            <ThemeRow key={theme.id} theme={theme} isLast={i === themes.length - 1} />
+          ))}
+        </div>
       )}
     </div>
   );
