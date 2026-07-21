@@ -4,7 +4,7 @@ import { AlertTriangle, FileText, Sparkles, UploadCloud } from "lucide-react";
 import { C, bodyFont, monoFont } from "./theme";
 import { SectionHeading, LoadingState, ErrorState } from "./Shared";
 import { listDocuments, uploadDocument } from "../lib/api/documents";
-import { listProjectAttributes } from "../lib/api/attributes";
+import { backfillAttributeValue, listProjectAttributes } from "../lib/api/attributes";
 import type { AttributeValue, DocFilter, DocumentSummary, ProjectAttribute } from "../lib/types";
 
 const STATE_STYLE: Record<DocumentSummary["state"], { color: string; label: string }> = {
@@ -93,6 +93,8 @@ export function UploadScreen({
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState<UploadNote[]>([]);
   const [uploadAttrValues, setUploadAttrValues] = useState<Record<string, string>>({});
+  const [backfilling, setBackfilling] = useState<string | null>(null);
+  const [backfillMessage, setBackfillMessage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [showManual, setShowManual] = useState(false);
@@ -141,6 +143,23 @@ export function UploadScreen({
     onUploaded();
   };
 
+  const handleBackfill = async (attr: ProjectAttribute) => {
+    setBackfilling(attr.key);
+    setBackfillMessage(null);
+    try {
+      const { updated } = await backfillAttributeValue(projectId, attr.key, "Unspecified");
+      setBackfillMessage(
+        updated === 0 ? `Every document already has a ${attr.label.toLowerCase()} value.` : `Set "Unspecified" as ${attr.label} on ${updated} document${updated > 1 ? "s" : ""} that had none.`,
+      );
+      await load();
+      onUploaded();
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBackfilling(null);
+    }
+  };
+
   const handleManualCreate = async () => {
     if (!manualName.trim() || !manualContent.trim()) return;
     setManualBusy(true);
@@ -168,6 +187,23 @@ export function UploadScreen({
       <SectionHeading eyebrow="Ingestion" title="Upload Documents" />
 
       <AttributeInputs attributes={attributes} values={uploadAttrValues} onChange={(key, value) => setUploadAttrValues((v) => ({ ...v, [key]: value }))} />
+
+      {attributes.length > 0 && (
+        <div className="flex items-center gap-3 flex-wrap mb-4">
+          {attributes.map((attr) => (
+            <button
+              key={attr.id}
+              onClick={() => void handleBackfill(attr)}
+              disabled={backfilling === attr.key}
+              className="text-xs uppercase tracking-wide disabled:opacity-60"
+              style={{ ...monoFont, color: C.mutedDark }}
+            >
+              {backfilling === attr.key ? "Backfilling…" : `Backfill missing ${attr.label} values`}
+            </button>
+          ))}
+          {backfillMessage && <span style={{ ...bodyFont, fontSize: 12, color: C.muted }}>{backfillMessage}</span>}
+        </div>
+      )}
 
       <div
         onDragOver={(e) => {
