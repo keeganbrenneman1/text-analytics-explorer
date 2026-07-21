@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { describeError } from "../lib/errorMessage";
-import { ChevronRight, FileText } from "lucide-react";
+import { ChevronRight, FileText, X } from "lucide-react";
 import { C, bodyFont, displayFont, monoFont } from "./theme";
 import { Card, ErrorState, LoadingState, SectionHeading } from "./Shared";
-import { getDocumentDetail, listDocuments, listDocumentsByAttribute, listDocumentsByTheme, listDocumentsByTopic } from "../lib/api/documents";
+import { getDocumentDetail, listDocuments, listDocumentsByAttribute, listDocumentsByThemes, listDocumentsByTopics } from "../lib/api/documents";
 import { listTopics, listThemes } from "../lib/api/taxonomy";
 import { listProjectAttributes, summarizeAttributeValues } from "../lib/api/attributes";
-import type { DocFilter, DocumentDetail as DocumentDetailType, DocumentSummary, ProjectAttribute, Theme, Topic } from "../lib/types";
+import type { DocFilter, DocumentDetail as DocumentDetailType, DocumentSummary, NamedId, ProjectAttribute, Theme, Topic } from "../lib/types";
 
 const STATE_STYLE: Record<DocumentSummary["state"], { color: string; label: string }> = {
   tagged: { color: C.verdigris, label: "Tagged" },
@@ -26,6 +26,15 @@ function MatchPill({ match }: { match: DocumentDetailType["matches"][number] }) 
         borderStyle: match.pending ? "dashed" : "solid",
       }}
     >
+      {match.breadcrumb.length > 0 && (
+        <div className="flex items-center gap-1 mb-1 flex-wrap">
+          {match.breadcrumb.map((ancestor) => (
+            <span key={ancestor} style={{ ...monoFont, fontSize: 10, color: C.mutedDark }}>
+              {ancestor} ›
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-1">
         <span style={{ ...displayFont, fontWeight: 600, fontSize: 14, color: deep }}>
           {match.label}
@@ -131,6 +140,54 @@ function flattenTopics(topics: Topic[]): Topic[] {
   return [...topics].sort((a, b) => (a.depth !== b.depth ? a.depth - b.depth : a.name.localeCompare(b.name)));
 }
 
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: NamedId[];
+  selected: NamedId[];
+  onChange: (next: NamedId[]) => void;
+}) {
+  const selectedIds = new Set(selected.map((s) => s.id));
+  const available = options.filter((o) => !selectedIds.has(o.id));
+
+  return (
+    <div className="flex items-start gap-2 flex-wrap">
+      <select
+        value=""
+        onChange={(e) => {
+          const opt = options.find((o) => o.id === e.target.value);
+          if (opt) onChange([...selected, opt]);
+        }}
+        className="px-2 py-1.5 rounded-sm text-xs"
+        style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}
+      >
+        <option value="">{label}…</option>
+        {available.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+      {selected.map((s) => (
+        <span
+          key={s.id}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs"
+          style={{ ...bodyFont, background: C.verdigrisDeep, color: "white" }}
+        >
+          {s.name}
+          <button onClick={() => onChange(selected.filter((x) => x.id !== s.id))} className="flex items-center">
+            <X size={11} />
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { projectId: string; initialFilter: DocFilter; refreshKey: number }) {
   const [filter, setFilter] = useState<DocFilter>(initialFilter);
   const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
@@ -148,7 +205,7 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
     { key: { kind: "pending" }, label: "Has pending" },
   ];
 
-  const isSameFilter = (a: DocFilter, b: DocFilter) => a.kind === "pending" && b.kind === "pending" ? true : a.kind === "state" && b.kind === "state" ? a.state === b.state : false;
+  const isSameFilter = (a: DocFilter, b: DocFilter) => (a.kind === "pending" && b.kind === "pending" ? true : a.kind === "state" && b.kind === "state" ? a.state === b.state : false);
 
   useEffect(() => {
     Promise.all([listTopics(projectId), listThemes(projectId), listProjectAttributes(projectId)])
@@ -163,8 +220,8 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
   useEffect(() => {
     setDocs(null);
     let request: Promise<DocumentSummary[]>;
-    if (filter.kind === "topic") request = listDocumentsByTopic(projectId, filter.topicId);
-    else if (filter.kind === "theme") request = listDocumentsByTheme(projectId, filter.themeId);
+    if (filter.kind === "topic") request = listDocumentsByTopics(projectId, filter.topics.map((t) => t.id));
+    else if (filter.kind === "theme") request = listDocumentsByThemes(projectId, filter.themes.map((t) => t.id));
     else if (filter.kind === "attribute") request = listDocumentsByAttribute(projectId, filter.key, filter.value);
     else request = listDocuments(projectId, filter.kind === "pending" ? "pending" : filter.state);
     request.then(setDocs).catch((err) => setError(describeError(err)));
@@ -174,7 +231,13 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
   if (error) return <ErrorState text={error} />;
 
   const filterLabel =
-    filter.kind === "topic" ? `Topic: ${filter.topicName}` : filter.kind === "theme" ? `Theme: ${filter.themeName}` : filter.kind === "attribute" ? `${filter.label}: ${filter.value}` : null;
+    filter.kind === "topic"
+      ? `Topic: ${filter.topics.map((t) => t.name).join(", ")}`
+      : filter.kind === "theme"
+        ? `Theme: ${filter.themes.map((t) => t.name).join(", ")}`
+        : filter.kind === "attribute"
+          ? `${filter.label}: ${filter.value}`
+          : null;
 
   return (
     <div>
@@ -196,58 +259,49 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
             {f.label}
           </button>
         ))}
-        {filterLabel && (
-          <span className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}>
-            {filterLabel}
-          </span>
-        )}
       </div>
 
-      <div className="flex gap-3 mb-6 flex-wrap items-center">
-        <p style={{ ...monoFont, fontSize: 10.5, color: C.mutedDark, letterSpacing: "0.06em" }} className="uppercase">
-          Drill into a specific match:
-        </p>
-        <select
-          value={filter.kind === "topic" ? filter.topicId : ""}
-          onChange={(e) => {
-            const topic = topics.find((t) => t.id === e.target.value);
-            if (topic) setFilter({ kind: "topic", topicId: topic.id, topicName: topic.name });
-          }}
-          className="px-2 py-1.5 rounded-sm text-xs"
-          style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}
-        >
-          <option value="">Topic…</option>
-          {flattenTopics(topics).map((t) => (
-            <option key={t.id} value={t.id}>
-              {"—".repeat(t.depth - 1)} {t.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filter.kind === "theme" ? filter.themeId : ""}
-          onChange={(e) => {
-            const theme = themes.find((t) => t.id === e.target.value);
-            if (theme) setFilter({ kind: "theme", themeId: theme.id, themeName: theme.name });
-          }}
-          className="px-2 py-1.5 rounded-sm text-xs"
-          style={{ ...bodyFont, background: C.panel, color: C.paper, border: `1px solid ${C.panelBorder}` }}
-        >
-          <option value="">Theme…</option>
-          {themes.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-        {attributes.map((attr) => (
-          <AttributeFilterSelect
-            key={attr.id}
-            projectId={projectId}
-            attribute={attr}
-            active={filter.kind === "attribute" && filter.key === attr.key ? filter.value : ""}
-            onSelect={(value) => setFilter({ kind: "attribute", key: attr.key, label: attr.label, value })}
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="flex items-start gap-3 flex-wrap">
+          <p style={{ ...monoFont, fontSize: 10.5, color: C.mutedDark, letterSpacing: "0.06em" }} className="uppercase pt-1.5">
+            Topics:
+          </p>
+          <MultiSelectFilter
+            label="Add topic"
+            options={flattenTopics(topics).map((t) => ({ id: t.id, name: `${"—".repeat(t.depth - 1)} ${t.name}`.trim() }))}
+            selected={filter.kind === "topic" ? filter.topics : []}
+            onChange={(next) => setFilter(next.length === 0 ? { kind: "state", state: "all" } : { kind: "topic", topics: next })}
           />
-        ))}
+        </div>
+        <div className="flex items-start gap-3 flex-wrap">
+          <p style={{ ...monoFont, fontSize: 10.5, color: C.mutedDark, letterSpacing: "0.06em" }} className="uppercase pt-1.5">
+            Themes:
+          </p>
+          <MultiSelectFilter
+            label="Add theme"
+            options={themes.map((t) => ({ id: t.id, name: t.name }))}
+            selected={filter.kind === "theme" ? filter.themes : []}
+            onChange={(next) => setFilter(next.length === 0 ? { kind: "state", state: "all" } : { kind: "theme", themes: next })}
+          />
+        </div>
+        {attributes.length > 0 && (
+          <div className="flex items-start gap-3 flex-wrap">
+            <p style={{ ...monoFont, fontSize: 10.5, color: C.mutedDark, letterSpacing: "0.06em" }} className="uppercase pt-1.5">
+              Attribute:
+            </p>
+            <div className="flex gap-3 flex-wrap">
+              {attributes.map((attr) => (
+                <AttributeFilterSelect
+                  key={attr.id}
+                  projectId={projectId}
+                  attribute={attr}
+                  active={filter.kind === "attribute" && filter.key === attr.key ? filter.value : ""}
+                  onSelect={(value) => setFilter({ kind: "attribute", key: attr.key, label: attr.label, value })}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {docs === null ? (
@@ -258,6 +312,7 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
         <div className="rounded-md overflow-hidden" style={{ border: `1px solid ${C.panelBorder}` }}>
           {docs.map((d, i) => {
             const stateStyle = STATE_STYLE[d.state];
+            const attributeValues = Object.entries(d.attributes);
             return (
               <button
                 key={d.id}
@@ -269,7 +324,12 @@ export function DocumentsScreen({ projectId, initialFilter, refreshKey }: { proj
                   <FileText size={15} color={C.muted} />
                   <span style={{ ...bodyFont, color: C.paper, fontSize: 13.5 }}>{d.name}</span>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  {attributeValues.map(([key, value]) => (
+                    <span key={key} style={{ ...monoFont, fontSize: 10.5, color: C.muted, border: `1px solid ${C.panelBorder}`, padding: "1px 6px", borderRadius: 4 }}>
+                      {value}
+                    </span>
+                  ))}
                   {d.pendingCount > 0 && (
                     <span style={{ ...monoFont, fontSize: 10.5, color: C.amber, border: `1px dashed ${C.amber}`, padding: "1px 6px", borderRadius: 4 }}>
                       {d.pendingCount} pending

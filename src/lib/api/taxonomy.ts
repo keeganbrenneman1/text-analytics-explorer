@@ -125,7 +125,15 @@ export function deriveKeywords(name: string): string[] {
   return [name.toLowerCase()];
 }
 
-/** Fills in descriptions for any topics/themes that don't have one yet (e.g. rows created before this feature, or via suggestion-confirm paths that don't set one). */
+// Signatures of the old (pre-trim) auto-generated wording, so a regenerate
+// pass can safely replace stale auto-generated text without touching
+// hand-written descriptions (e.g. the starter models' curated copy).
+const STALE_TOPIC_DESCRIPTION_PREFIX = "Documents about ";
+const STALE_THEME_DESCRIPTION_PREFIX = "A recurring why/how pattern around ";
+
+/** Fills in descriptions for any topics/themes that don't have one yet, and
+ * refreshes anything still carrying the old, wordier auto-generated phrasing.
+ * Never touches a hand-written or already-current description. */
 export async function backfillDescriptions(projectId: string): Promise<{ updated: number }> {
   const db = client();
   let updated = 0;
@@ -140,7 +148,7 @@ export async function backfillDescriptions(projectId: string): Promise<{ updated
   const topicNameById = new Map((topics ?? []).map((t) => [t.id, t.name]));
 
   for (const topic of topics ?? []) {
-    if (topic.description) continue;
+    if (topic.description && !topic.description.startsWith(STALE_TOPIC_DESCRIPTION_PREFIX)) continue;
     const parentName = topic.parent_id ? (topicNameById.get(topic.parent_id) ?? null) : null;
     const description = generateTopicDescription({ name: topic.name, keywords: topic.keywords, parentName });
     const { error } = await db.from("topics").update({ description }).eq("id", topic.id);
@@ -149,7 +157,7 @@ export async function backfillDescriptions(projectId: string): Promise<{ updated
   }
 
   for (const theme of themes ?? []) {
-    if (theme.description) continue;
+    if (theme.description && !theme.description.startsWith(STALE_THEME_DESCRIPTION_PREFIX)) continue;
     const description = generateThemeDescription({ name: theme.name, keywords: theme.keywords });
     const { error } = await db.from("themes").update({ description }).eq("id", theme.id);
     if (error) throw error;

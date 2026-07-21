@@ -21,10 +21,24 @@ function mapAttribute(row: AttributeRow): ProjectAttribute {
   };
 }
 
+/** Projects created before the structured-attribute registry existed have zero
+ * rows here, which would silently hide the Source field and Reports'
+ * attribute breakdown. Self-heal by seeding one default attribute the first
+ * time a project with none is loaded. */
+async function ensureDefaultAttribute(projectId: string): Promise<ProjectAttribute[]> {
+  const { error } = await client().from("project_attributes").insert({ project_id: projectId, key: "source", label: "Source", type: "text" });
+  // 23505 = unique violation — another concurrent call already seeded it, fine to ignore.
+  if (error && error.code !== "23505") throw error;
+  const { data, error: refetchErr } = await client().from("project_attributes").select("*").eq("project_id", projectId).order("created_at");
+  if (refetchErr) throw refetchErr;
+  return (data ?? []).map(mapAttribute);
+}
+
 export async function listProjectAttributes(projectId: string): Promise<ProjectAttribute[]> {
   const { data, error } = await client().from("project_attributes").select("*").eq("project_id", projectId).order("created_at");
   if (error) throw error;
-  return (data ?? []).map(mapAttribute);
+  if ((data ?? []).length === 0) return ensureDefaultAttribute(projectId);
+  return data.map(mapAttribute);
 }
 
 export async function createProjectAttribute(

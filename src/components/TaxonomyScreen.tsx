@@ -204,7 +204,7 @@ export function TaxonomyScreen({
     setBackfillMessage(null);
     try {
       const { updated } = await backfillDescriptions(projectId);
-      setBackfillMessage(updated === 0 ? "Every topic and theme already has a description." : `Generated ${updated} missing description${updated > 1 ? "s" : ""}.`);
+      setBackfillMessage(updated === 0 ? "Every topic and theme already has a current description." : `Generated ${updated} description${updated > 1 ? "s" : ""}.`);
       await load();
     } catch (err) {
       setError(describeError(err));
@@ -227,7 +227,7 @@ export function TaxonomyScreen({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-medium disabled:opacity-60"
           style={{ ...bodyFont, color: C.paper, border: `1px solid ${C.panelBorder}` }}
         >
-          <Sparkles size={12} /> {backfilling ? "Generating…" : "Generate missing descriptions"}
+          <Sparkles size={12} /> {backfilling ? "Generating…" : "Generate/refresh descriptions"}
         </button>
         {backfillMessage && (
           <span style={{ ...bodyFont, fontSize: 12, color: C.muted }}>{backfillMessage}</span>

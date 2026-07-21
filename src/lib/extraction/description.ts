@@ -2,6 +2,13 @@
 // stand-in for an LLM-authored description. Swap for a real Claude call by
 // implementing the same two function signatures elsewhere and re-exporting
 // from index.ts — nothing that calls these needs to change.
+//
+// Deliberately terse: the topic/theme name is already shown as a heading
+// everywhere a description appears, and lineage (parent chain) is shown as
+// a visual breadcrumb rather than restated in prose — so all a description
+// needs to add is what actually differentiates it: the matching keywords.
+// `parentName` is kept on the input shape for a future real-LLM version that
+// may want the context, even though the current template doesn't use it.
 
 export interface DescribableTopic {
   name: string;
@@ -16,19 +23,14 @@ export interface DescribableTheme {
 
 export function generateTopicDescription(topic: DescribableTopic): string {
   const keywords = topic.keywords.filter((k) => k.toLowerCase() !== topic.name.toLowerCase());
-  const keywordPhrase = keywords.length > 0 ? ` Typically triggered by language like ${listPhrase(keywords.slice(0, 4))}.` : "";
-  const parentPhrase = topic.parentName ? ` A subtopic under ${topic.parentName}.` : "";
-  return `Documents about ${lowerFirst(topic.name)}.${parentPhrase}${keywordPhrase}`.trim();
+  if (keywords.length === 0) return "No distinguishing keywords yet — matches are based on the topic name alone.";
+  return `Typically triggered by language like ${listPhrase(keywords.slice(0, 4))}.`;
 }
 
 export function generateThemeDescription(theme: DescribableTheme): string {
   const keywords = theme.keywords.filter((k) => k.toLowerCase() !== theme.name.toLowerCase());
-  const keywordPhrase = keywords.length > 0 ? ` Often signaled by phrases like ${listPhrase(keywords.slice(0, 4))}.` : "";
-  return `A recurring why/how pattern around ${lowerFirst(theme.name)}, not a fixed category.${keywordPhrase}`.trim();
-}
-
-function lowerFirst(s: string): string {
-  return s.length ? s[0].toLowerCase() + s.slice(1) : s;
+  if (keywords.length === 0) return "No distinguishing keywords yet — matches are based on the theme name alone.";
+  return `Often signaled by phrases like ${listPhrase(keywords.slice(0, 4))}.`;
 }
 
 function listPhrase(items: string[]): string {
