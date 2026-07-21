@@ -57,6 +57,30 @@ export async function createProjectAttribute(
   return mapAttribute(data);
 }
 
+/** Sets `value` for any document in the project missing this attribute key —
+ * documents uploaded before the attribute existed (or before this specific
+ * one was added) otherwise stay blank forever, since new attributes only
+ * apply going forward. One-shot, safe to re-run (only touches genuinely
+ * missing values, never overwrites something a user actually entered). */
+export async function backfillAttributeValue(projectId: string, key: string, value: string): Promise<{ updated: number }> {
+  const db = client();
+  const { data: docs, error } = await db.from("documents").select("id, attributes").eq("project_id", projectId);
+  if (error) throw error;
+
+  let updated = 0;
+  for (const doc of docs ?? []) {
+    const existing = doc.attributes[key];
+    if (existing !== undefined && existing !== null && existing !== "") continue;
+    const { error: updateErr } = await db
+      .from("documents")
+      .update({ attributes: { ...doc.attributes, [key]: value } })
+      .eq("id", doc.id);
+    if (updateErr) throw updateErr;
+    updated += 1;
+  }
+  return { updated };
+}
+
 /** Distinct values for one attribute across a project's documents, with document counts —
  * powers the Upload screen's clickthrough and Reports' attribute breakdown/filter. */
 export async function summarizeAttributeValues(projectId: string, key: string): Promise<{ value: AttributeValue; count: number }[]> {

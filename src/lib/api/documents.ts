@@ -109,12 +109,44 @@ export async function listDocuments(
   return filter === "pending" ? summaries.filter((d) => d.pendingCount > 0) : summaries;
 }
 
-/** Documents confirmed under any of the given topics (OR) — powers the Reports/Taxonomy
- * "drill into documents" actions and the Documents screen's multi-select topic filter. */
+/** A document only ever gets a document_topics row for the *specific* node that
+ * matched (e.g. "Attendants"), never its ancestors — a parent only gets tagged
+ * directly on the rare document where its own keywords happen to appear
+ * alongside a matched child's. So filtering by a parent topic like "In-flight"
+ * needs to include everything tagged under any of its descendants too, or it
+ * comes back empty even though plenty of documents are conceptually "under" it. */
+async function expandWithDescendants(projectId: string, topicIds: string[]): Promise<string[]> {
+  const db = client();
+  const { data: allTopics, error } = await db.from("topics").select("id, parent_id").eq("project_id", projectId);
+  if (error) throw error;
+
+  const childrenByParent = new Map<string, string[]>();
+  for (const t of allTopics ?? []) {
+    if (!t.parent_id) continue;
+    const siblings = childrenByParent.get(t.parent_id) ?? [];
+    siblings.push(t.id);
+    childrenByParent.set(t.parent_id, siblings);
+  }
+
+  const expanded = new Set<string>();
+  const stack = [...topicIds];
+  while (stack.length > 0) {
+    const id = stack.pop() as string;
+    if (expanded.has(id)) continue;
+    expanded.add(id);
+    for (const childId of childrenByParent.get(id) ?? []) stack.push(childId);
+  }
+  return [...expanded];
+}
+
+/** Documents confirmed under any of the given topics or their descendants (OR) —
+ * powers the Reports/Taxonomy "drill into documents" actions and the Documents
+ * screen's multi-select topic filter. */
 export async function listDocumentsByTopics(projectId: string, topicIds: string[]): Promise<DocumentSummary[]> {
   if (topicIds.length === 0) return [];
   const db = client();
-  const { data: links, error: linkErr } = await db.from("document_topics").select("document_id").in("topic_id", topicIds).eq("orphan", false);
+  const expandedIds = await expandWithDescendants(projectId, topicIds);
+  const { data: links, error: linkErr } = await db.from("document_topics").select("document_id").in("topic_id", expandedIds).eq("orphan", false);
   if (linkErr) throw linkErr;
   const ids = [...new Set((links ?? []).map((l) => l.document_id))];
   if (ids.length === 0) return [];
