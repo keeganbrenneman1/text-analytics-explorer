@@ -67,6 +67,8 @@ export interface DocumentSegmentMatch {
   kind: "topic" | "theme";
   id: string;
   label: string;
+  /** Ancestor names, root-first, excluding this node itself — empty for themes and top-level topics. */
+  breadcrumb: string[];
   description: string | null;
   excerpt: string;
   confidence: number;
@@ -162,11 +164,16 @@ export interface StarterDocumentSeed {
   attributes?: Record<string, AttributeValue>;
 }
 
+export interface NamedId {
+  id: string;
+  name: string;
+}
+
 export type DocFilter =
   | { kind: "state"; state: "all" | DocumentState }
   | { kind: "pending" }
-  | { kind: "topic"; topicId: string; topicName: string }
-  | { kind: "theme"; themeId: string; themeName: string }
+  | { kind: "topic"; topics: NamedId[] }
+  | { kind: "theme"; themes: NamedId[] }
   | { kind: "attribute"; key: string; label: string; value: AttributeValue };
 
 export interface StarterModel {

@@ -228,10 +228,13 @@ export function UploadScreen({
           <input
             value={manualName}
             onChange={(e) => setManualName(e.target.value)}
-            placeholder="Document name..."
-            className="w-full rounded-sm px-3 py-2 mb-3 outline-none"
+            placeholder="e.g. support_call_2214 or a short title"
+            className="w-full rounded-sm px-3 py-2 outline-none"
             style={{ ...bodyFont, background: C.ink, border: `1px solid ${C.panelBorder}`, color: C.paper, fontSize: 13.5 }}
           />
+          <p style={{ ...bodyFont, color: C.mutedDark, fontSize: 11.5 }} className="mb-3">
+            Shows in the document list and doubles as its unique key — saving again with the same name replaces this document instead of creating a duplicate.
+          </p>
           <textarea
             value={manualContent}
             onChange={(e) => setManualContent(e.target.value)}

@@ -109,12 +109,14 @@ export async function listDocuments(
   return filter === "pending" ? summaries.filter((d) => d.pendingCount > 0) : summaries;
 }
 
-/** Documents confirmed under a specific topic — powers the Reports/Taxonomy "drill into documents" actions. */
-export async function listDocumentsByTopic(projectId: string, topicId: string): Promise<DocumentSummary[]> {
+/** Documents confirmed under any of the given topics (OR) — powers the Reports/Taxonomy
+ * "drill into documents" actions and the Documents screen's multi-select topic filter. */
+export async function listDocumentsByTopics(projectId: string, topicIds: string[]): Promise<DocumentSummary[]> {
+  if (topicIds.length === 0) return [];
   const db = client();
-  const { data: links, error: linkErr } = await db.from("document_topics").select("document_id").eq("topic_id", topicId).eq("orphan", false);
+  const { data: links, error: linkErr } = await db.from("document_topics").select("document_id").in("topic_id", topicIds).eq("orphan", false);
   if (linkErr) throw linkErr;
-  const ids = (links ?? []).map((l) => l.document_id);
+  const ids = [...new Set((links ?? []).map((l) => l.document_id))];
   if (ids.length === 0) return [];
 
   const { data: rows, error } = await db.from("documents").select("*").eq("project_id", projectId).in("id", ids).order("created_at", { ascending: false });
@@ -122,12 +124,13 @@ export async function listDocumentsByTopic(projectId: string, topicId: string): 
   return summarizeDocuments(projectId, rows ?? []);
 }
 
-/** Documents tagged with a specific theme. */
-export async function listDocumentsByTheme(projectId: string, themeId: string): Promise<DocumentSummary[]> {
+/** Documents tagged with any of the given themes (OR). */
+export async function listDocumentsByThemes(projectId: string, themeIds: string[]): Promise<DocumentSummary[]> {
+  if (themeIds.length === 0) return [];
   const db = client();
-  const { data: links, error: linkErr } = await db.from("document_themes").select("document_id").eq("theme_id", themeId);
+  const { data: links, error: linkErr } = await db.from("document_themes").select("document_id").in("theme_id", themeIds);
   if (linkErr) throw linkErr;
-  const ids = (links ?? []).map((l) => l.document_id);
+  const ids = [...new Set((links ?? []).map((l) => l.document_id))];
   if (ids.length === 0) return [];
 
   const { data: rows, error } = await db.from("documents").select("*").eq("project_id", projectId).in("id", ids).order("created_at", { ascending: false });
@@ -161,11 +164,8 @@ export async function getDocumentDetail(documentId: string): Promise<DocumentDet
   if (tErr) throw tErr;
   if (thErr) throw thErr;
 
-  const [{ data: topicNameRows, error: tnErr }, { data: themeNameRows, error: thnErr }] = await Promise.all([
-    client()
-      .from("topics")
-      .select("id, name, description")
-      .in("id", (topicMatches ?? []).map((m) => m.topic_id)),
+  const [{ data: allProjectTopics, error: tnErr }, { data: themeNameRows, error: thnErr }] = await Promise.all([
+    client().from("topics").select("id, name, description, parent_id").eq("project_id", row.project_id),
     client()
       .from("themes")
       .select("id, name, description")
@@ -173,10 +173,21 @@ export async function getDocumentDetail(documentId: string): Promise<DocumentDet
   ]);
   if (tnErr) throw tnErr;
   if (thnErr) throw thnErr;
-  const topicNames = new Map((topicNameRows ?? []).map((t) => [t.id, t.name]));
+  const topicById = new Map((allProjectTopics ?? []).map((t) => [t.id, t]));
   const themeNames = new Map((themeNameRows ?? []).map((t) => [t.id, t.name]));
-  const topicDescriptions = new Map((topicNameRows ?? []).map((t) => [t.id, t.description]));
   const themeDescriptions = new Map((themeNameRows ?? []).map((t) => [t.id, t.description]));
+
+  const topicBreadcrumb = (topicId: string): string[] => {
+    const chain: string[] = [];
+    let current = topicById.get(topicId)?.parent_id ?? null;
+    while (current) {
+      const parent = topicById.get(current);
+      if (!parent) break;
+      chain.unshift(parent.name);
+      current = parent.parent_id;
+    }
+    return chain;
+  };
 
   const { data: pendingSuggestions, error: sErr } = await client()
     .from("suggestions")
@@ -207,8 +218,9 @@ export async function getDocumentDetail(documentId: string): Promise<DocumentDet
     ...(topicMatches ?? []).map((m): DocumentSegmentMatch => ({
       kind: "topic",
       id: m.topic_id,
-      label: topicNames.get(m.topic_id) ?? "Unknown topic",
-      description: topicDescriptions.get(m.topic_id) ?? null,
+      label: topicById.get(m.topic_id)?.name ?? "Unknown topic",
+      breadcrumb: topicBreadcrumb(m.topic_id),
+      description: topicById.get(m.topic_id)?.description ?? null,
       excerpt: m.excerpt ?? "",
       confidence: Number(m.confidence),
       orphan: m.orphan,
@@ -218,6 +230,7 @@ export async function getDocumentDetail(documentId: string): Promise<DocumentDet
       kind: "theme",
       id: m.theme_id,
       label: themeNames.get(m.theme_id) ?? "Unknown theme",
+      breadcrumb: [],
       description: themeDescriptions.get(m.theme_id) ?? null,
       excerpt: m.excerpt ?? "",
       confidence: Number(m.confidence),

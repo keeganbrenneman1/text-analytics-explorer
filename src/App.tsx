@@ -45,9 +45,9 @@ type TaTab = "taxonomy" | "suggestions" | "pending" | "denied" | "sandbox";
 function docFilterKey(filter: DocFilter): string {
   switch (filter.kind) {
     case "topic":
-      return `topic:${filter.topicId}`;
+      return `topic:${filter.topics.map((t) => t.id).join(",")}`;
     case "theme":
-      return `theme:${filter.themeId}`;
+      return `theme:${filter.themes.map((t) => t.id).join(",")}`;
     case "attribute":
       return `attribute:${filter.key}:${filter.value}`;
     case "pending":
@@ -130,13 +130,13 @@ export default function App() {
   ];
 
   const goToTopicDocuments = (topicId: string, topicName: string) => {
-    setDocFilter({ kind: "topic", topicId, topicName });
+    setDocFilter({ kind: "topic", topics: [{ id: topicId, name: topicName }] });
     setSection("documents");
   };
 
   const goToDocuments = (target: ReportsDrillTarget) => {
-    if ("topicId" in target) setDocFilter({ kind: "topic", topicId: target.topicId, topicName: target.topicName });
-    else if ("themeId" in target) setDocFilter({ kind: "theme", themeId: target.themeId, themeName: target.themeName });
+    if ("topicId" in target) setDocFilter({ kind: "topic", topics: [{ id: target.topicId, name: target.topicName }] });
+    else if ("themeId" in target) setDocFilter({ kind: "theme", themes: [{ id: target.themeId, name: target.themeName }] });
     else if ("attributeKey" in target) setDocFilter({ kind: "attribute", key: target.attributeKey, label: target.attributeLabel, value: target.attributeValue });
     else setDocFilter({ kind: "state", state: target.state });
     setSection("documents");
